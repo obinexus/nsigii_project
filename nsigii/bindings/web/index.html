@@ -1,0 +1,71 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>nsigii WebAssembly demo</title>
+<h1>nsigii WebAssembly</h1>
+<p>Run <code>make wasm</code>, serve this directory over HTTP, then select arbitrary bytes to pack or a <code>.nsigii</code> file to unpack.</p>
+<input id="file" type="file">
+<button id="pack">Pack</button>
+<button id="unpack">Unpack</button>
+<pre id="log"></pre>
+<script src="nsigii.js"></script>
+<script>
+const log = document.querySelector('#log');
+let modulePromise;
+const moduleReady = () => modulePromise ??= NsigiiModule();
+
+function download(bytes, name) {
+  const blob = new Blob([bytes], {type:'application/octet-stream'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 0);
+}
+
+async function selectedBytes() {
+  const file = document.querySelector('#file').files[0];
+  if (!file) throw new Error('select a file first');
+  return [file, new Uint8Array(await file.arrayBuffer())];
+}
+
+document.querySelector('#pack').onclick = async () => {
+  try {
+    const [file, raw] = await selectedBytes();
+    const M = await moduleReady();
+    const boundPtr = M._malloc(4), outNPtr = M._malloc(4);
+    const inPtr = M._malloc(Math.max(1, raw.length));
+    M.HEAPU8.set(raw, inPtr);
+    const boundFn = M.cwrap('nsigii_encoded_bound', 'number', ['number','number','number']);
+    const encFn = M.cwrap('nsigii_encode_buffer', 'number', ['number','number','number','number','number']);
+    if (boundFn(raw.length, 65536, boundPtr) !== 0) throw new Error('size calculation failed');
+    const dv = new DataView(M.HEAPU8.buffer);
+    const bound = dv.getUint32(boundPtr, true);
+    const outPtr = M._malloc(bound);
+    if (encFn(inPtr, raw.length, outPtr, bound, outNPtr) !== 0) throw new Error('encode failed');
+    const outN = dv.getUint32(outNPtr, true);
+    download(M.HEAPU8.slice(outPtr, outPtr + outN), file.name + '.nsigii');
+    log.textContent = `packed ${raw.length} bytes -> ${outN} bytes`;
+    M._free(boundPtr); M._free(outNPtr); M._free(inPtr); M._free(outPtr);
+  } catch (e) { log.textContent = String(e); }
+};
+
+document.querySelector('#unpack').onclick = async () => {
+  try {
+    const [file, encoded] = await selectedBytes();
+    const M = await moduleReady();
+    const outNPtr = M._malloc(4);
+    const inPtr = M._malloc(Math.max(1, encoded.length));
+    const outPtr = M._malloc(Math.max(1, encoded.length)); // decoded data is always smaller than its framed container
+    M.HEAPU8.set(encoded, inPtr);
+    const decFn = M.cwrap('nsigii_decode_buffer', 'number', ['number','number','number','number','number','number']);
+    const st = decFn(inPtr, encoded.length, outPtr, encoded.length, outNPtr, 0);
+    if (st !== 0) throw new Error(`decode failed, status=${st}`);
+    const dv = new DataView(M.HEAPU8.buffer);
+    const outN = dv.getUint32(outNPtr, true);
+    const name = file.name.endsWith('.nsigii') ? file.name.slice(0, -7) : file.name + '.dat';
+    download(M.HEAPU8.slice(outPtr, outPtr + outN), name || 'decoded.dat');
+    log.textContent = `unpacked ${encoded.length} bytes -> ${outN} bytes`;
+    M._free(outNPtr); M._free(inPtr); M._free(outPtr);
+  } catch (e) { log.textContent = String(e); }
+};
+</script>
