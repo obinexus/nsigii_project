@@ -77,6 +77,6 @@ make node-addon
 node bindings/node/native_example.mjs
 ```
 
-Standard Lua can use `bindings/lua/nsigii_lua.c` (`make lua-module`, with Lua development headers installed). Browser JavaScript uses the exact C core compiled to WebAssembly with `make wasm` (Emscripten required), then `bindings/web/index.html` provides a minimal file packer UI.
+Standard Lua can use `bindings/lua/nsigii_lua.c` (`make lua-module`, with Lua development headers installed). Browser JavaScript uses the exact C core compiled to WebAssembly with `make wasm` (Emscripten required): `bindings/web/nsigii-adapter.mjs` wraps it as `encode` / `decode` (see `bindings/web/README.md`), and `bindings/web/index.html` is a minimal file packer UI. Do not re-implement the `NSIGII01` framing in hand-written JavaScript.
 
 The ABI intentionally uses fixed-width integers, byte pointers, lengths, integer status codes, and caller-owned buffers. No C structs need to cross the boundary for basic encode/decode calls.

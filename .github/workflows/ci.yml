@@ -1,0 +1,79 @@
+name: CI
+
+# Builds the C core and every language binding the repo ships, so a regression
+# in any of them is caught here rather than downstream. FORMAT.md and src/nsigii.c
+# are not touched by CI — this only exercises what already exists.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System deps (Lua)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblua5.4-dev lua5.4 luajit
+
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.22" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+
+      # --- C core --------------------------------------------------------------
+      - name: make (static + shared + cli)
+        run: make
+      - name: make test
+        run: make test
+
+      # --- FFI bindings against the shared library ---------------------------
+      - name: Python ctypes example
+        run: python3 bindings/python/example.py
+      - name: Go cgo example
+        run: cd bindings/go && go run example.go
+      - name: Lua module
+        run: |
+          make lua-module LUA_PKG=lua5.4
+          lua5.4 -e 'package.cpath="bindings/lua/?.so"; local n=require("nsigii"); local e=n.encode("a\0b"); assert(n.decode(e)=="a\0b"); print("lua module: ok")'
+      - name: LuaJIT FFI example
+        run: luajit bindings/luajit/example.lua
+
+      # --- Node: N-API addon and the CLI process boundary -------------------
+      - name: Node N-API addon
+        run: |
+          make node-addon
+          node bindings/node/native_example.mjs
+      - name: Node CLI-boundary example
+        run: node bindings/node/example.mjs
+
+      # --- WebAssembly -----------------------------------------------------
+      - uses: mymindstorm/setup-emsdk@v14
+        with: { version: 3.1.69 }
+      - name: make wasm + adapter self-test
+        run: |
+          make wasm
+          test -s bindings/web/nsigii.js && test -s bindings/web/nsigii.wasm
+          node bindings/web/nsigii-adapter.test.mjs
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nsigii-core-wasm
+          path: |
+            bindings/web/nsigii.js
+            bindings/web/nsigii.wasm
+            bindings/web/nsigii-adapter.mjs
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Working tree clean
+        run: git diff --exit-code
