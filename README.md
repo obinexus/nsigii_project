@@ -4,6 +4,29 @@ A small C11, format-agnostic, data-only container codec for arbitrary byte strea
 
 The C core has no filesystem dependency, no heap allocation, no payload parser, and no language-runtime dependency. It works through read/write callbacks and exposes a stable plain-C ABI for FFI. File handling and language adapters stay outside the codec.
 
+## Relationship to the NSIGII ecosystem
+
+This repository is the **transport layer** of a three-layer system. The `NSIGII`
+prefix and the `.nsigii` extension are shared by three unrelated binary layouts,
+each owned by one repository:
+
+| Layer | Magic (bytes 0–7) | Repository | Role |
+|---|---|---|---|
+| **`CORE_V1`** — this repo | `NSIGII01` | `obinexus/nsigii_project` | frame arbitrary bytes, CRC-32, streaming |
+| Constitutional wrapper | `NSIGII\0` + `0x07` at byte 7 | `obinexusmk2/nsigii` | SHA-256 + trident verification envelope |
+| Legacy codec stream | `NSIGII\0\0` | `obinexus/nsigii_viewer` | `7.0.0` / `7.1.0A` media + state renderer |
+
+They are **not** the same format and are never collapsed into one. `FORMAT.md`
+in this repository is authoritative for `CORE_V1` only. A `CORE_V1` container may
+hold any bytes — including a constitutional wrapper or a legacy stream — but this
+codec neither knows nor cares: it frames bytes and checks their CRC, nothing
+more. Do not add filenames, dimensions, timestamps, hashes-as-metadata,
+consensus, or any application semantics to `src/nsigii.c`.
+
+The cross-layer detection contract and the end-to-end architecture live in the
+main repo: [`docs/DISPATCH.md`](https://github.com/obinexusmk2/nsigii/blob/main/docs/DISPATCH.md)
+and [`docs/NSIGII-INTEGRATION.md`](https://github.com/obinexusmk2/nsigii/blob/main/docs/NSIGII-INTEGRATION.md).
+
 ## Build
 
 ```sh
