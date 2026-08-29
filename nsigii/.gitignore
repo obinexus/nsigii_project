@@ -1,0 +1,26 @@
+# C build output
+build/
+
+# Generated native bindings
+bindings/node/*.node
+bindings/lua/*.so
+
+# Generated WebAssembly
+bindings/web/nsigii.js
+bindings/web/nsigii.wasm
+
+# Round-trip test artifacts
+binary.dat
+binary-restored.dat
+binary.nsigii
+stream.nsigii
+stream-restored.dat
+restored.dat
+OUTPUT.nsigii
+
+# Misc
+*.o
+*.a
+*.so
+__pycache__/
+*.pyc
