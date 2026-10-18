@@ -4,6 +4,29 @@ A small C11, format-agnostic, data-only container codec for arbitrary byte strea
 
 The C core has no filesystem dependency, no heap allocation, no payload parser, and no language-runtime dependency. It works through read/write callbacks and exposes a stable plain-C ABI for FFI. File handling and language adapters stay outside the codec.
 
+## Relationship to the NSIGII ecosystem
+
+This repository is the **transport layer** of a three-layer system. The `NSIGII`
+prefix and the `.nsigii` extension are shared by three unrelated binary layouts,
+each owned by one repository:
+
+| Layer | Magic (bytes 0–7) | Repository | Role |
+|---|---|---|---|
+| **`CORE_V1`** — this repo | `NSIGII01` | `obinexus/nsigii_project` | frame arbitrary bytes, CRC-32, streaming |
+| Constitutional wrapper | `NSIGII\0` + `0x07` at byte 7 | `obinexusmk2/nsigii` | SHA-256 + trident verification envelope |
+| Legacy codec stream | `NSIGII\0\0` | `obinexus/nsigii_viewer` | `7.0.0` / `7.1.0A` media + state renderer |
+
+They are **not** the same format and are never collapsed into one. `FORMAT.md`
+in this repository is authoritative for `CORE_V1` only. A `CORE_V1` container may
+hold any bytes — including a constitutional wrapper or a legacy stream — but this
+codec neither knows nor cares: it frames bytes and checks their CRC, nothing
+more. Do not add filenames, dimensions, timestamps, hashes-as-metadata,
+consensus, or any application semantics to `src/nsigii.c`.
+
+The cross-layer detection contract and the end-to-end architecture live in the
+main repo: [`docs/DISPATCH.md`](https://github.com/obinexusmk2/nsigii/blob/main/docs/DISPATCH.md)
+and [`docs/NSIGII-INTEGRATION.md`](https://github.com/obinexusmk2/nsigii/blob/main/docs/NSIGII-INTEGRATION.md).
+
 ## Build
 
 ```sh
@@ -54,6 +77,6 @@ make node-addon
 node bindings/node/native_example.mjs
 ```
 
-Standard Lua can use `bindings/lua/nsigii_lua.c` (`make lua-module`, with Lua development headers installed). Browser JavaScript uses the exact C core compiled to WebAssembly with `make wasm` (Emscripten required), then `bindings/web/index.html` provides a minimal file packer UI.
+Standard Lua can use `bindings/lua/nsigii_lua.c` (`make lua-module`, with Lua development headers installed). Browser JavaScript uses the exact C core compiled to WebAssembly with `make wasm` (Emscripten required): `bindings/web/nsigii-adapter.mjs` wraps it as `encode` / `decode` (see `bindings/web/README.md`), and `bindings/web/index.html` is a minimal file packer UI. Do not re-implement the `NSIGII01` framing in hand-written JavaScript.
 
 The ABI intentionally uses fixed-width integers, byte pointers, lengths, integer status codes, and caller-owned buffers. No C structs need to cross the boundary for basic encode/decode calls.
